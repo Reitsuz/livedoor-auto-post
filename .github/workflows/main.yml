@@ -2,8 +2,7 @@ name: auto-post
 
 on:
   schedule:
-    - cron: '0 * * * *'
-
+    - cron: "0 * * * *"   # 1時間ごと
   workflow_dispatch:
 
 jobs:
@@ -13,14 +12,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: setup python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.10"
 
-      - run: pip install -r requirements.txt
+      - name: install dependencies
+        run: pip install -r requirements.txt
 
-      - run: python main.py
+      - name: run script
+        run: python main.py
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           LIVEDOOR_ID: ${{ secrets.LIVEDOOR_ID }}
           LIVEDOOR_PASS: ${{ secrets.LIVEDOOR_PASS }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

@@ -1,54 +1,69 @@
 import os
+import json
 import feedparser
 import requests
 from requests.auth import HTTPBasicAuth
 from google import genai
 
-# =========================================
+# =========================
 # 設定
-# =========================================
+# =========================
 
-# RSS
 RSS_URL = "https://news.yahoo.co.jp/rss/topics/top-picks.xml"
-
-# livedoorブログID
 BLOG_ID = "gensentrend"
 
-# 環境変数
 LIVEDOOR_ID = os.environ["LIVEDOOR_ID"]
 LIVEDOOR_PASS = os.environ["LIVEDOOR_PASS"]
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 
-# =========================================
+SEEN_FILE = "seen.json"
+
+# =========================
+# 重複防止
+# =========================
+
+if os.path.exists(SEEN_FILE):
+    seen = set(json.load(open(SEEN_FILE, "r", encoding="utf-8")))
+else:
+    seen = set()
+
+def is_new(link):
+    return link not in seen
+
+def mark_seen(link):
+    seen.add(link)
+    with open(SEEN_FILE, "w", encoding="utf-8") as f:
+        json.dump(list(seen), f, ensure_ascii=False)
+
+# =========================
 # RSS取得
-# =========================================
+# =========================
 
 feed = feedparser.parse(RSS_URL)
 
-if len(feed.entries) == 0:
+if not feed.entries:
     print("記事なし")
     exit()
 
-entry = feed.entries[0]
-
-title = entry.title
-link = entry.link
-
-summary = ""
-
-if hasattr(entry, "summary"):
-    summary = entry.summary
-
-print("取得記事:", title)
-
-# =========================================
+# =========================
 # Gemini
-# =========================================
+# =========================
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-prompt = f"""
-以下のニュースをまとめブログ風の記事にしてください。
+def generate_article(title, summary, link):
+    prompt = f"""
+あなたはニュースまとめブログの編集者です。
+
+以下のニュースを読みやすくまとめてください。
+
+条件:
+- 日本語
+- 見出し付き
+- 400〜700文字
+- 誇張しない
+- 読みやすさ重視
+- 軽い感想を最後に入れる
 
 タイトル:
 {title}
@@ -56,34 +71,26 @@ prompt = f"""
 内容:
 {summary}
 
-元記事:
+元URL:
 {link}
-
-条件:
-・日本語
-・読みやすく
-・SEOを意識
-・見出しをつける
-・2chまとめ風
-・最後に簡単な感想も入れる
 """
 
-response = client.models.generate_content(
-    model="gemini-1.5-flash",
-    contents=prompt
-)
+    res = client.models.generate_content(
+        model="gemini-1.5-flash",
+        contents=prompt
+    )
 
-article = response.text
+    return res.text
 
-print("記事生成完了")
-
-# =========================================
+# =========================
 # livedoor投稿
-# =========================================
+# =========================
 
-url = f"https://livedoor.blogcms.jp/atompub/{BLOG_ID}/article"
+def post_blog(title, article, link):
 
-xml = f"""<?xml version="1.0" encoding="utf-8"?>
+    url = f"https://blogcms.jp/atompub/{BLOG_ID}/article"
+
+    xml = f"""<?xml version="1.0" encoding="utf-8"?>
 <entry xmlns="http://www.w3.org/2005/Atom">
 <title>{title}</title>
 <content type="html">
@@ -98,17 +105,37 @@ xml = f"""<?xml version="1.0" encoding="utf-8"?>
 </entry>
 """
 
-res = requests.post(
-    url,
-    data=xml.encode("utf-8"),
-    headers={
-        "Content-Type": "application/atom+xml; charset=utf-8"
-    },
-    auth=HTTPBasicAuth(
-        LIVEDOOR_ID,
-        LIVEDOOR_PASS
+    res = requests.post(
+        url,
+        data=xml.encode("utf-8"),
+        headers={"Content-Type": "application/atom+xml; charset=utf-8"},
+        auth=HTTPBasicAuth(LIVEDOOR_ID, LIVEDOOR_PASS)
     )
-)
 
-print("Status:", res.status_code)
-print(res.text)
+    print("Status:", res.status_code)
+    print(res.text)
+
+# =========================
+# メイン処理（複数記事対応）
+# =========================
+
+for entry in feed.entries[:5]:
+
+    title = entry.title
+    link = entry.link
+    summary = getattr(entry, "summary", "")
+
+    if not is_new(link):
+        continue
+
+    print("処理中:", title)
+
+    try:
+        article = generate_article(title, summary, link)
+        post_blog(title, article, link)
+        mark_seen(link)
+
+        print("投稿完了")
+
+    except Exception as e:
+        print("エラー:", e)
