@@ -2,7 +2,7 @@ name: auto-post
 
 on:
   schedule:
-    - cron: "0 * * * *"   # 1時間ごと
+    - cron: "0 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -25,4 +25,3 @@ jobs:
         env:
           LIVEDOOR_ID: ${{ secrets.LIVEDOOR_ID }}
           LIVEDOOR_PASS: ${{ secrets.LIVEDOOR_PASS }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
