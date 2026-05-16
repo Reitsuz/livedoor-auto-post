@@ -24,4 +24,4 @@ jobs:
         run: python main.py
         env:
           LIVEDOOR_ID: ${{ secrets.LIVEDOOR_ID }}
-          LIVEDOOR_PASS: ${{ secrets.LIVEDOOR_PASS }}
+          LIVEDOOR_PASS: ${{ secrets.LIVEDOOR_PASS }}　
